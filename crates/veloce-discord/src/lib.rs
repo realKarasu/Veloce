@@ -22,4 +22,4 @@ pub mod gateway;
 pub mod rest;
 pub use error::{DiscordError, Result};
 pub use gateway::{run_gateway, GatewayCommand};
-pub use rest::RestClient;
+pub use rest::{GuildDetail, MemberRoles, RestClient};

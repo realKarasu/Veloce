@@ -1,9 +1,22 @@
 use crate::error::{DiscordError, Result};
 use crate::identity::{super_properties_b64, USER_AGENT};
-use crate::models::{Channel, Guild, Message, User};
+use crate::models::{Channel, Guild, Message, Role, Snowflake, User};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, USER_AGENT as UA};
 
 const API_BASE: &str = "https://discord.com/api/v10";
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct GuildDetail {
+    pub owner_id: Snowflake,
+    #[serde(default)]
+    pub roles: Vec<Role>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct MemberRoles {
+    #[serde(default)]
+    pub roles: Vec<Snowflake>,
+}
 
 pub fn parse_retry_after_ms(header_value: Option<&str>) -> u64 {
     header_value
@@ -87,6 +100,15 @@ impl RestClient {
             "{API_BASE}/channels/{channel_id}/messages?limit={limit}"
         ))
         .await
+    }
+
+    pub async fn guild(&self, guild_id: &str) -> Result<GuildDetail> {
+        self.get_json(format!("{API_BASE}/guilds/{guild_id}")).await
+    }
+
+    pub async fn current_member(&self, guild_id: &str) -> Result<MemberRoles> {
+        self.get_json(format!("{API_BASE}/users/@me/guilds/{guild_id}/member"))
+            .await
     }
 
     pub async fn send_message(&self, channel_id: &str, content: &str) -> Result<Message> {

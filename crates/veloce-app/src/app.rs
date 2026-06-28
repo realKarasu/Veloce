@@ -256,6 +256,7 @@ fn draw_chat(
                     {
                         state.selected_guild = Some(g.id.clone());
                         state.channels.clear();
+                        net.subscribe_guild(g.id.clone());
                         net.send(Command::SelectGuild(g.id));
                     }
                 }

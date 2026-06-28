@@ -3,11 +3,12 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio::sync::watch;
-use veloce_discord::{run_gateway, Command, Event, RestClient};
+use veloce_discord::{run_gateway, Command, Event, GatewayCommand, RestClient};
 
 pub struct NetHandle {
     pub events: Receiver<Event>,
     cmd_tx: UnboundedSender<Command>,
+    gw_cmd_tx: UnboundedSender<GatewayCommand>,
     _shutdown: watch::Sender<bool>,
 }
 
@@ -15,11 +16,19 @@ impl NetHandle {
     pub fn send(&self, cmd: Command) {
         let _ = self.cmd_tx.send(cmd);
     }
+
+    /// Demande au gateway de s'abonner aux events d'une guilde (frame op 14).
+    pub fn subscribe_guild(&self, guild_id: String) {
+        let _ = self
+            .gw_cmd_tx
+            .send(GatewayCommand::SubscribeGuild(guild_id));
+    }
 }
 
 pub fn spawn_net(token: String, ctx: Context) -> NetHandle {
     let (event_out, events): (Sender<Event>, Receiver<Event>) = channel();
     let (cmd_tx, mut cmd_rx) = unbounded_channel::<Command>();
+    let (gw_cmd_tx, gw_cmd_rx) = unbounded_channel::<GatewayCommand>();
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
     thread::spawn(move || {
@@ -50,7 +59,7 @@ pub fn spawn_net(token: String, ctx: Context) -> NetHandle {
             // tâche gateway
             let gw_token = token.clone();
             let gw_shutdown = shutdown_rx.clone();
-            tokio::spawn(async move { run_gateway(gw_token, gw_tx, gw_shutdown).await });
+            tokio::spawn(async move { run_gateway(gw_token, gw_tx, gw_shutdown, gw_cmd_rx).await });
 
             loop {
                 tokio::select! {
@@ -70,6 +79,7 @@ pub fn spawn_net(token: String, ctx: Context) -> NetHandle {
     NetHandle {
         events,
         cmd_tx,
+        gw_cmd_tx,
         _shutdown: shutdown_tx,
     }
 }

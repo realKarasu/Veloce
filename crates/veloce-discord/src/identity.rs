@@ -15,8 +15,8 @@ pub fn super_properties_json() -> serde_json::Value {
         "client_version": "1.0.9028",
         "os_version": "10.0.19045",
         "system_locale": "fr",
-        "client_build_number": 9999,
-        "native_build_number": 9999
+        "client_build_number": 354667,
+        "native_build_number": 60863
     })
 }
 
@@ -43,7 +43,7 @@ mod tests {
     }
 
     #[test]
-    fn user_agent_non_vide() {
+    fn user_agent_contient_mozilla() {
         assert!(USER_AGENT.contains("Mozilla"));
     }
 }

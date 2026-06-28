@@ -14,6 +14,11 @@ pub fn text_channels_sorted(mut channels: Vec<Channel>) -> Vec<Channel> {
     channels
 }
 
+/// True si le message doit être ajouté (pas déjà présent par id).
+pub fn should_append_message(existing: &[Message], incoming: &Message) -> bool {
+    !existing.iter().any(|m| m.id == incoming.id)
+}
+
 #[derive(Default)]
 struct ChatState {
     user: Option<User>,
@@ -24,6 +29,7 @@ struct ChatState {
     selected_channel: Option<String>,
     connection: Option<ConnectionState>,
     draft: String,
+    last_error: Option<String>,
 }
 
 enum Screen {
@@ -77,6 +83,12 @@ fn keyring_set(token: &str) {
     }
 }
 
+fn keyring_clear() {
+    if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER) {
+        let _ = entry.delete_credential();
+    }
+}
+
 fn spans_to_job(spans: &[Span]) -> LayoutJob {
     let mut job = LayoutJob::default();
     for s in spans {
@@ -109,6 +121,9 @@ impl eframe::App for VeloceApp {
             self.connect(token, ctx);
         }
 
+        // Capturé en dehors du match pour éviter l'emprunt multiple de self.
+        let mut auth_failed: Option<String> = None;
+
         match &mut self.screen {
             Screen::Token { input, error } => {
                 let mut submit: Option<String> = None;
@@ -132,12 +147,25 @@ impl eframe::App for VeloceApp {
                 }
             }
             Screen::Chat { net, state } => {
-                // Drain des events.
+                // Drain des events — intercepter AuthFailed avant apply_event.
                 while let Ok(ev) = net.events.try_recv() {
+                    if let Event::AuthFailed(msg) = ev {
+                        auth_failed = Some(msg);
+                        continue;
+                    }
                     apply_event(state, ev);
                 }
                 draw_chat(ctx, net, state.as_mut());
             }
+        }
+
+        // Hors du match : réinitialiser l'écran si l'auth a échoué.
+        if let Some(msg) = auth_failed {
+            keyring_clear();
+            self.screen = Screen::Token {
+                input: String::new(),
+                error: Some(msg),
+            };
         }
     }
 }
@@ -152,6 +180,7 @@ fn apply_event(state: &mut ChatState, ev: Event) {
         Event::ChannelsLoaded { guild_id, channels } => {
             if Some(&guild_id) == state.selected_guild.as_ref() {
                 state.channels = text_channels_sorted(channels);
+                state.last_error = None;
             }
         }
         Event::MessagesLoaded {
@@ -160,10 +189,13 @@ fn apply_event(state: &mut ChatState, ev: Event) {
         } => {
             if Some(&channel_id) == state.selected_channel.as_ref() {
                 state.messages = messages;
+                state.last_error = None;
             }
         }
         Event::MessageCreated(m) => {
-            if Some(&m.channel_id) == state.selected_channel.as_ref() {
+            if Some(&m.channel_id) == state.selected_channel.as_ref()
+                && should_append_message(&state.messages, &m)
+            {
                 state.messages.push(m);
             }
         }
@@ -173,7 +205,12 @@ fn apply_event(state: &mut ChatState, ev: Event) {
             }
         }
         Event::MessageDeleted { id, .. } => state.messages.retain(|m| m.id != id),
-        Event::Error(e) => tracing::warn!("erreur réseau: {e}"),
+        Event::Error(e) => {
+            tracing::warn!("erreur réseau: {e}");
+            state.last_error = Some(e);
+        }
+        // AuthFailed est intercepté dans `update` avant d'atteindre cette fonction.
+        Event::AuthFailed(_) => {}
     }
 }
 
@@ -250,6 +287,10 @@ fn draw_chat(ctx: &egui::Context, net: &NetHandle, state: &mut ChatState) {
     });
 
     egui::CentralPanel::default().show(ctx, |ui| {
+        if let Some(err) = &state.last_error {
+            ui.colored_label(Color32::LIGHT_RED, err.as_str());
+            ui.separator();
+        }
         egui::ScrollArea::vertical()
             .stick_to_bottom(true)
             .show(ui, |ui| {
@@ -275,7 +316,7 @@ fn draw_chat(ctx: &egui::Context, net: &NetHandle, state: &mut ChatState) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use veloce_discord::Channel;
+    use veloce_discord::{Channel, User};
 
     fn ch(id: &str, kind: u8, pos: i32) -> Channel {
         Channel {
@@ -287,11 +328,35 @@ mod tests {
         }
     }
 
+    fn make_msg(id: &str) -> Message {
+        Message {
+            id: id.into(),
+            channel_id: "ch1".into(),
+            content: String::new(),
+            author: User {
+                id: "u1".into(),
+                username: "user".into(),
+                global_name: None,
+                discriminator: None,
+            },
+            timestamp: None,
+        }
+    }
+
     #[test]
     fn ne_garde_que_les_salons_texte_tries_par_position() {
         let input = vec![ch("b", 0, 2), ch("voc", 2, 0), ch("a", 0, 1)];
         let out = text_channels_sorted(input);
         let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
         assert_eq!(ids, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn should_append_message_dedupe_par_id() {
+        let existing = vec![make_msg("1")];
+        // Même id → ne doit pas être ajouté.
+        assert!(!should_append_message(&existing, &make_msg("1")));
+        // Id différent → doit être ajouté.
+        assert!(should_append_message(&existing, &make_msg("2")));
     }
 }

@@ -30,6 +30,8 @@ pub enum Event {
         channel_id: Snowflake,
     },
     Error(String),
+    /// Échec d'authentification (token invalide/expiré) — distinct d'une erreur réseau transitoire.
+    AuthFailed(String),
 }
 
 #[cfg(test)]

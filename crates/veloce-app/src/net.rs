@@ -31,19 +31,26 @@ pub fn spawn_net(token: String, ctx: Context) -> NetHandle {
             // canal interne gateway -> relais
             let (gw_tx, mut gw_rx) = unbounded_channel::<Event>();
 
+            // Valider le token avant de lancer la gateway.
+            let rest = match RestClient::new(token.clone()) {
+                Ok(r) => r,
+                Err(e) => {
+                    let _ = event_out.send(Event::AuthFailed(format!("Token invalide : {e}")));
+                    ctx.request_repaint();
+                    return;
+                }
+            };
+            if let Err(e) = rest.current_user().await {
+                let _ =
+                    event_out.send(Event::AuthFailed(format!("Authentification échouée : {e}")));
+                ctx.request_repaint();
+                return;
+            }
+
             // tâche gateway
             let gw_token = token.clone();
             let gw_shutdown = shutdown_rx.clone();
             tokio::spawn(async move { run_gateway(gw_token, gw_tx, gw_shutdown).await });
-
-            // client REST pour les commandes
-            let rest = match RestClient::new(token.clone()) {
-                Ok(r) => r,
-                Err(e) => {
-                    let _ = event_out.send(Event::Error(format!("REST: {e}")));
-                    return;
-                }
-            };
 
             loop {
                 tokio::select! {

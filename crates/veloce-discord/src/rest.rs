@@ -32,6 +32,7 @@ impl RestClient {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         let http = reqwest::Client::builder()
             .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(30))
             .build()?;
         Ok(Self { http })
     }

@@ -1,0 +1,10 @@
+# Rust
+/target
+**/*.rs.bk
+# NB : Cargo.lock est versionné (projet produisant un binaire applicatif)
+
+# Éditeurs / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

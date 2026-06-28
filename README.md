@@ -58,10 +58,12 @@ dans `PluginManager::builtin()`.
 
 ## Limitations connues
 
-- **Temps réel sur gros serveurs :** pour les comptes utilisateur, Discord peut
-  exiger une trame d'abonnement de guilde (gateway `op 14`) pour recevoir les
-  `MESSAGE_CREATE` des grands serveurs. Non implémenté en v0.1 → sur un très
-  gros serveur, les nouveaux messages peuvent ne pas arriver en direct.
+- **Temps réel sur gros serveurs :** Veloce envoie désormais une trame
+  d'abonnement de guilde (gateway `op 14`) au clic sur un serveur, et la
+  ré-émet après reconnexion — ce qui débloque les `MESSAGE_CREATE` des grands
+  serveurs pour les comptes utilisateur. C'est de l'**API non documentée** :
+  format « best-effort » isolé dans `build_guild_subscribe`, à **vérifier sur un
+  vrai gros serveur** (ajustable en un seul endroit si Discord change).
 - **Éditions de messages :** les `MESSAGE_UPDATE` partiels (embed seul, etc.)
   peuvent ne pas se mettre à jour.
 - **Identité client :** le `client_build_number` des super-properties doit être

@@ -1,3 +1,7 @@
+pub mod loud;
+pub mod message_counter;
+pub mod text_replace;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use veloce_discord::Event;

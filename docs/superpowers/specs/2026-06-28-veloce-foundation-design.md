@@ -241,8 +241,8 @@ La v0.1 **ne construit pas** le système de plugins, mais préserve les seams :
 ## 11. Repo & qualité
 
 - Nom **Veloce**, repo **public**, branche `main`.
-- **Licence : GPL-3.0** (esprit Vencord). *À confirmer — MIT possible si plus
-  permissif souhaité.*
+- **Licence : GPL-3.0** (esprit Vencord) — décidée, copyleft pour garder le
+  projet et ses dérivés ouverts.
 - **CI GitHub Actions** (macOS/Linux/Windows) : `cargo fmt --check`,
   `cargo clippy -- -D warnings`, `cargo test`.
 - `README.md` (présentation, avertissement CGU, build), `.gitignore` Rust.

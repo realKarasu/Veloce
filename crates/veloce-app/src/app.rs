@@ -298,10 +298,12 @@ fn draw_chat(
                 if let Some(cid) = state.selected_channel.clone() {
                     let mut content = state.draft.trim().to_string();
                     plugins.apply_outgoing(&mut content);
-                    net.send(Command::SendMessage {
-                        channel_id: cid,
-                        content,
-                    });
+                    if !content.trim().is_empty() {
+                        net.send(Command::SendMessage {
+                            channel_id: cid,
+                            content,
+                        });
+                    }
                     state.draft.clear();
                 }
                 resp.request_focus();

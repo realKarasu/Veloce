@@ -16,6 +16,7 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(|cc| {
             fonts::setup_fonts(&cc.egui_ctx);
+            egui_extras::install_image_loaders(&cc.egui_ctx);
             Ok(Box::new(VeloceApp::new()))
         }),
     )

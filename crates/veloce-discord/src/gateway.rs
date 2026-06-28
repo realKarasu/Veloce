@@ -32,6 +32,11 @@ fn build_heartbeat(seq: Option<u64>) -> Value {
     json!({ "op": 1, "d": seq })
 }
 
+/// Pure backoff helper: doubles current_ms, capped at 30 s.
+pub fn next_backoff(current_ms: u64) -> u64 {
+    (current_ms * 2).min(30_000)
+}
+
 /// Boucle principale : (re)connexion jusqu'au shutdown, avec backoff.
 pub async fn run_gateway(
     token: String,
@@ -45,7 +50,15 @@ pub async fn run_gateway(
             return;
         }
         let _ = event_tx.send(Event::Connection(ConnectionState::Connecting));
-        match connect_once(&token, &mut state, &event_tx, &mut shutdown).await {
+        match connect_once(
+            &token,
+            &mut state,
+            &event_tx,
+            &mut shutdown,
+            &mut backoff_ms,
+        )
+        .await
+        {
             Ok(()) => return, // shutdown propre
             Err(()) => {
                 let _ = event_tx.send(Event::Connection(ConnectionState::Reconnecting));
@@ -53,7 +66,7 @@ pub async fn run_gateway(
                     _ = tokio::time::sleep(Duration::from_millis(backoff_ms)) => {}
                     _ = shutdown.changed() => return,
                 }
-                backoff_ms = (backoff_ms * 2).min(30_000);
+                backoff_ms = next_backoff(backoff_ms);
             }
         }
     }
@@ -65,6 +78,7 @@ async fn connect_once(
     state: &mut GatewayState,
     event_tx: &UnboundedSender<Event>,
     shutdown: &mut watch::Receiver<bool>,
+    backoff: &mut u64,
 ) -> std::result::Result<(), ()> {
     let (ws, _) = tokio_tungstenite::connect_async(GATEWAY_URL)
         .await
@@ -74,11 +88,12 @@ async fn connect_once(
     let (mut write, mut read) = ws.split();
     let mut hb = tokio::time::interval(Duration::from_secs(45));
     hb.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut hb_started = false;
 
     loop {
         tokio::select! {
             _ = shutdown.changed() => return Ok(()),
-            _ = hb.tick(), if state.heartbeat_interval_ms.is_some() => {
+            _ = hb.tick(), if hb_started => {
                 if write
                     .send(WsMessage::Text(
                         build_heartbeat(state.seq).to_string().into(),
@@ -90,11 +105,10 @@ async fn connect_once(
                 }
             }
             msg = read.next() => {
-                let Some(Ok(WsMessage::Text(txt))) = msg else {
-                    if matches!(msg, Some(Ok(WsMessage::Close(_))) | None) {
-                        return Err(());
-                    }
-                    continue;
+                let txt = match msg {
+                    Some(Ok(WsMessage::Close(_))) | Some(Err(_)) | None => return Err(()),
+                    Some(Ok(WsMessage::Text(txt))) => txt,
+                    _ => continue,
                 };
                 let payload: GatewayPayload = match serde_json::from_str(&txt) {
                     Ok(p) => p,
@@ -111,6 +125,8 @@ async fn connect_once(
                         hb = tokio::time::interval(Duration::from_millis(ms));
                         hb.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
                         hb.reset();
+                        *backoff = 1000;
+                        hb_started = true;
                     }
                     let hs = state.handshake_action();
                     let frame = match &hs {
@@ -173,9 +189,11 @@ fn dispatch_event(t: &str, d: &Value, state: &mut GatewayState, tx: &UnboundedSe
                 .get("guilds")
                 .and_then(|g| serde_json::from_value(g.clone()).ok())
                 .unwrap_or_default();
+            let _ = tx.send(Event::Connection(ConnectionState::Connected));
             if let Some(user) = user {
-                let _ = tx.send(Event::Connection(ConnectionState::Connected));
                 let _ = tx.send(Event::Ready { user, guilds });
+            } else {
+                let _ = tx.send(Event::Error("READY sans user déchiffrable".into()));
             }
         }
         "MESSAGE_CREATE" => {
@@ -212,5 +230,12 @@ mod tests {
         assert_eq!(v["op"], 2);
         assert_eq!(v["d"]["token"], "mon-token");
         assert!(v["d"]["properties"]["os"].is_string());
+    }
+
+    #[test]
+    fn next_backoff_double_et_plafonne() {
+        assert_eq!(next_backoff(1000), 2000);
+        assert_eq!(next_backoff(20_000), 30_000);
+        assert_eq!(next_backoff(30_000), 30_000);
     }
 }

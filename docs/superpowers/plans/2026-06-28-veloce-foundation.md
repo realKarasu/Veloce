@@ -378,11 +378,22 @@ git commit -m "feat(discord): modèles serde tolérants + tests de désérialisa
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn event_est_clonable_et_debug() {
-        let e = Event::Connection(ConnectionState::Connected);
-        let _ = format!("{:?}", e.clone());
-        assert_eq!(ConnectionState::Connected, ConnectionState::Connected);
+    fn message_deleted_porte_id_et_channel() {
+        let e = Event::MessageDeleted { id: "1".into(), channel_id: "2".into() };
+        match e.clone() {
+            Event::MessageDeleted { id, channel_id } => {
+                assert_eq!(id, "1");
+                assert_eq!(channel_id, "2");
+            }
+            other => panic!("variant inattendu: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn connection_state_compare() {
+        assert_ne!(ConnectionState::Connected, ConnectionState::Disconnected);
     }
 }
 ```
@@ -811,8 +822,6 @@ pub fn parse_retry_after_ms(header_value: Option<&str>) -> u64 {
 
 pub struct RestClient {
     http: reqwest::Client,
-    #[allow(dead_code)]
-    token: String,
 }
 
 impl RestClient {
@@ -823,7 +832,7 @@ impl RestClient {
         headers.insert("X-Super-Properties", HeaderValue::from_str(&super_properties_b64()).map_err(|e| DiscordError::Decode(e.to_string()))?);
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         let http = reqwest::Client::builder().default_headers(headers).build()?;
-        Ok(Self { http, token })
+        Ok(Self { http })
     }
 
     async fn get_json<T: serde::de::DeserializeOwned>(&self, url: String) -> Result<T> {
@@ -1004,7 +1013,6 @@ async fn connect_once(
     let (mut write, mut read) = ws.split();
     let mut hb = tokio::time::interval(Duration::from_secs(45));
     hb.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    let mut handshaken = false;
 
     loop {
         tokio::select! {
@@ -1039,7 +1047,6 @@ async fn connect_once(
                     if write.send(WsMessage::Text(frame.to_string().into())).await.is_err() {
                         return Err(());
                     }
-                    handshaken = true;
                     continue;
                 }
                 let resumable = if payload.op == 9 { payload.d.as_bool() } else { None };
@@ -1054,7 +1061,6 @@ async fn connect_once(
                     GatewayAction::Dispatch(t) => dispatch_event(&t, &payload.d, state, event_tx),
                     _ => {}
                 }
-                let _ = handshaken; // marqueur de progression
             }
         }
     }

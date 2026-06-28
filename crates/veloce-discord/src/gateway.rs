@@ -236,6 +236,33 @@ async fn connect_once(
     }
 }
 
+/// Extrait les guildes d'un READY, tolérant aux comptes utilisateur :
+/// le nom/icône peuvent être au top-level (bots) ou sous `properties` (comptes
+/// user), et les guildes indisponibles (sans nom) sont ignorées. Le parsing est
+/// fait élément par élément pour qu'une seule guilde malformée ne vide pas tout.
+fn parse_ready_guilds(d: &Value) -> Vec<Guild> {
+    d.get("guilds")
+        .and_then(Value::as_array)
+        .map(|arr| arr.iter().filter_map(parse_one_guild).collect())
+        .unwrap_or_default()
+}
+
+fn parse_one_guild(v: &Value) -> Option<Guild> {
+    let id = v.get("id").and_then(Value::as_str)?.to_string();
+    let props = v.get("properties");
+    let name = v
+        .get("name")
+        .and_then(Value::as_str)
+        .or_else(|| props.and_then(|p| p.get("name")).and_then(Value::as_str))?
+        .to_string();
+    let icon = v
+        .get("icon")
+        .and_then(Value::as_str)
+        .or_else(|| props.and_then(|p| p.get("icon")).and_then(Value::as_str))
+        .map(str::to_string);
+    Some(Guild { id, name, icon })
+}
+
 fn dispatch_event(t: &str, d: &Value, state: &mut GatewayState, tx: &UnboundedSender<Event>) {
     match t {
         "READY" => {
@@ -245,10 +272,24 @@ fn dispatch_event(t: &str, d: &Value, state: &mut GatewayState, tx: &UnboundedSe
             let user: Option<User> = d
                 .get("user")
                 .and_then(|u| serde_json::from_value(u.clone()).ok());
-            let guilds: Vec<Guild> = d
+            let guilds = parse_ready_guilds(d);
+            let raw_count = d
                 .get("guilds")
-                .and_then(|g| serde_json::from_value(g.clone()).ok())
-                .unwrap_or_default();
+                .and_then(Value::as_array)
+                .map_or(0, |a| a.len());
+            tracing::info!(
+                "READY : {raw_count} guilde(s) brute(s), {} parsée(s)",
+                guilds.len()
+            );
+            if guilds.is_empty() && raw_count > 0 {
+                if let Some(first) = d
+                    .get("guilds")
+                    .and_then(Value::as_array)
+                    .and_then(|a| a.first())
+                {
+                    tracing::warn!("READY : 0 guilde parsée — 1ère guilde brute = {first}");
+                }
+            }
             let _ = tx.send(Event::Connection(ConnectionState::Connected));
             if let Some(user) = user {
                 let _ = tx.send(Event::Ready { user, guilds });
@@ -308,5 +349,31 @@ mod tests {
         assert!(v["d"]["activities"].is_boolean());
         assert!(v["d"]["threads"].is_boolean());
         assert!(v["d"]["channels"].is_object());
+    }
+
+    #[test]
+    fn parse_ready_guilds_tolere_nom_top_level_et_properties() {
+        // Bot : nom au top-level. Compte user : nom sous `properties`.
+        // Guilde indisponible (sans nom) : ignorée. Champs extra : ignorés.
+        let d = json!({
+            "guilds": [
+                { "id": "1", "name": "Bot-style", "icon": "a", "extra": 42 },
+                { "id": "2", "properties": { "name": "User-style", "icon": "b" }, "channels": [] },
+                { "id": "3", "unavailable": true }
+            ]
+        });
+        let g = parse_ready_guilds(&d);
+        assert_eq!(g.len(), 2);
+        assert_eq!(g[0].id, "1");
+        assert_eq!(g[0].name, "Bot-style");
+        assert_eq!(g[0].icon.as_deref(), Some("a"));
+        assert_eq!(g[1].id, "2");
+        assert_eq!(g[1].name, "User-style");
+        assert_eq!(g[1].icon.as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn parse_ready_guilds_vide_si_absent() {
+        assert!(parse_ready_guilds(&json!({})).is_empty());
     }
 }

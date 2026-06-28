@@ -97,21 +97,27 @@ async fn handle_command(
 ) {
     let result: Result<Event, String> = match cmd {
         Command::SelectGuild(guild_id) => {
-            let (channels, detail, member) = tokio::join!(
-                rest.guild_channels(&guild_id),
-                rest.guild(&guild_id),
-                rest.current_member(&guild_id),
-            );
-            match (channels, detail, member) {
-                (Ok(channels), Ok(detail), Ok(member)) => Ok(Event::GuildChannels {
-                    guild_id,
-                    channels,
-                    roles: detail.roles,
-                    owner_id: detail.owner_id,
-                    member_roles: member.roles,
-                    me_id: me_id.to_string(),
-                }),
-                _ => Err("Impossible de charger les salons du serveur".to_string()),
+            // Les salons sont indispensables ; rôles/membre (pour le filtrage par
+            // permissions) sont best-effort : s'ils échouent, on affiche tous les
+            // salons plutôt que rien (les endpoints compte-user sont incertains).
+            match rest.guild_channels(&guild_id).await {
+                Ok(channels) => {
+                    let (detail, member) =
+                        tokio::join!(rest.guild(&guild_id), rest.current_member(&guild_id));
+                    let (roles, owner_id) = detail
+                        .map(|d| (d.roles, d.owner_id))
+                        .unwrap_or_else(|_| (Vec::new(), String::new()));
+                    let member_roles = member.map(|m| m.roles).unwrap_or_default();
+                    Ok(Event::GuildChannels {
+                        guild_id,
+                        channels,
+                        roles,
+                        owner_id,
+                        member_roles,
+                        me_id: me_id.to_string(),
+                    })
+                }
+                Err(e) => Err(e.to_string()),
             }
         }
         Command::FetchHistory(channel_id) => rest

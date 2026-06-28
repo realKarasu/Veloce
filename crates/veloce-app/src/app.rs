@@ -3,6 +3,7 @@ use crate::net::{spawn_net, NetHandle};
 use crate::plugins::PluginManager;
 use eframe::egui;
 use egui::{text::LayoutJob, Color32, FontId, RichText, TextFormat};
+use std::collections::HashSet;
 use veloce_discord::{
     build_channel_tree, visible_channel_ids, Channel, Command, ConnectionState, Event, Guild,
     Message, TreeRow, User,
@@ -205,14 +206,20 @@ fn apply_event(state: &mut ChatState, ev: Event) {
             me_id,
         } => {
             if Some(&guild_id) == state.selected_guild.as_ref() {
-                let visible = visible_channel_ids(
-                    &channels,
-                    &roles,
-                    &owner_id,
-                    &member_roles,
-                    &me_id,
-                    &guild_id,
-                );
+                // Données de permissions absentes (rôles vides, ex. endpoint
+                // refusé) → afficher tous les salons plutôt que rien.
+                let visible: HashSet<String> = if roles.is_empty() {
+                    channels.iter().map(|c| c.id.clone()).collect()
+                } else {
+                    visible_channel_ids(
+                        &channels,
+                        &roles,
+                        &owner_id,
+                        &member_roles,
+                        &me_id,
+                        &guild_id,
+                    )
+                };
                 state.channel_tree = build_channel_tree(&channels, &visible);
                 state.channels = channels;
                 state.last_error = None;

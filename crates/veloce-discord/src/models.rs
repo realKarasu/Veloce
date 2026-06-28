@@ -31,6 +31,30 @@ pub struct Channel {
     pub guild_id: Option<Snowflake>,
     #[serde(default)]
     pub position: Option<i32>,
+    #[serde(default)]
+    pub parent_id: Option<Snowflake>,
+    #[serde(default)]
+    pub permission_overwrites: Vec<Overwrite>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Overwrite {
+    pub id: Snowflake,
+    #[serde(rename = "type")]
+    pub kind: u8, // 0 = rôle, 1 = membre
+    #[serde(default)]
+    pub allow: String,
+    #[serde(default)]
+    pub deny: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Role {
+    pub id: Snowflake,
+    #[serde(default)]
+    pub permissions: String,
+    #[serde(default)]
+    pub position: i64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -84,5 +108,36 @@ mod tests {
         let g: Guild = serde_json::from_str(json).unwrap();
         assert_eq!(g.name, "Mon Serveur");
         assert_eq!(g.icon.as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn deserialise_channel_avec_parent_et_overwrites() {
+        let json = r#"{ "id":"5","type":0,"name":"général","guild_id":"10","position":2,
+            "parent_id":"99",
+            "permission_overwrites":[ {"id":"10","type":0,"allow":"0","deny":"1024"} ] }"#;
+        let c: Channel = serde_json::from_str(json).unwrap();
+        assert_eq!(c.parent_id.as_deref(), Some("99"));
+        assert_eq!(c.permission_overwrites.len(), 1);
+        let o = &c.permission_overwrites[0];
+        assert_eq!(o.id, "10");
+        assert_eq!(o.kind, 0);
+        assert_eq!(o.deny, "1024");
+    }
+
+    #[test]
+    fn channel_sans_parent_ni_overwrites() {
+        // rétro-compat : un salon sans ces champs reste valide.
+        let json = r#"{ "id":"1","type":0,"name":"x" }"#;
+        let c: Channel = serde_json::from_str(json).unwrap();
+        assert!(c.parent_id.is_none());
+        assert!(c.permission_overwrites.is_empty());
+    }
+
+    #[test]
+    fn deserialise_role() {
+        let json = r#"{ "id":"10","name":"@everyone","permissions":"1024","position":0 }"#;
+        let r: Role = serde_json::from_str(json).unwrap();
+        assert_eq!(r.id, "10");
+        assert_eq!(r.permissions, "1024");
     }
 }

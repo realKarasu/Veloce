@@ -363,6 +363,8 @@ mod tests {
             kind,
             guild_id: None,
             position: Some(pos),
+            parent_id: None,
+            permission_overwrites: Vec::new(),
         }
     }
 

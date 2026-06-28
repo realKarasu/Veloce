@@ -2,6 +2,10 @@ pub mod loud;
 pub mod message_counter;
 pub mod text_replace;
 
+pub use loud::Loud;
+pub use message_counter::MessageCounter;
+pub use text_replace::TextReplace;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use veloce_discord::Event;
@@ -68,7 +72,7 @@ impl PluginManager {
 
     pub fn apply_render(&self, content: &mut String) {
         for p in &self.plugins {
-            if self.enabled.get(p.name()).copied().unwrap_or(false) {
+            if self.is_enabled(p.name()) {
                 p.on_render_content(content);
             }
         }
@@ -101,6 +105,45 @@ impl PluginManager {
         }
         if let Ok(json) = serde_json::to_string_pretty(&self.enabled) {
             let _ = std::fs::write(path, json);
+        }
+    }
+
+    /// Manager prêt à l'emploi : état persistant chargé puis plugins intégrés enregistrés.
+    pub fn builtin() -> Self {
+        let mut m = Self::new();
+        m.load_persisted();
+        m.register(Box::new(TextReplace::default()));
+        m.register(Box::new(MessageCounter::default()));
+        m.register(Box::new(Loud));
+        m
+    }
+
+    /// UI de la fenêtre Plugins : pour chaque plugin, une case activé + ses réglages.
+    pub fn settings_ui(&mut self, ui: &mut eframe::egui::Ui) {
+        use eframe::egui;
+        let mut toggles: Vec<(String, bool)> = Vec::new();
+        for p in &mut self.plugins {
+            let name = p.name().to_string();
+            let mut on = self.enabled.get(&name).copied().unwrap_or(false);
+            ui.horizontal(|ui| {
+                if ui.checkbox(&mut on, &name).changed() {
+                    toggles.push((name.clone(), on));
+                }
+                ui.weak(p.description());
+            });
+            if on {
+                egui::CollapsingHeader::new(format!("Réglages — {name}"))
+                    .id_salt(&name)
+                    .show(ui, |ui| p.settings_ui(ui));
+            }
+            ui.separator();
+        }
+        let changed = !toggles.is_empty();
+        for (name, on) in toggles {
+            self.set_enabled(&name, on);
+        }
+        if changed {
+            self.save();
         }
     }
 }

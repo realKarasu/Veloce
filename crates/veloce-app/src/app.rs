@@ -1,5 +1,6 @@
 use crate::markdown::{parse_markdown, Span};
 use crate::net::{spawn_net, NetHandle};
+use crate::plugins::PluginManager;
 use eframe::egui;
 use egui::{text::LayoutJob, Color32, FontId, RichText, TextFormat};
 use veloce_discord::{Channel, Command, ConnectionState, Event, Guild, Message, User};
@@ -47,6 +48,8 @@ pub struct VeloceApp {
     screen: Screen,
     /// Token lu au démarrage depuis le trousseau ; déclenche la connexion auto au 1er `update`.
     pending_token: Option<String>,
+    plugins: PluginManager,
+    show_plugins: bool,
 }
 
 impl VeloceApp {
@@ -57,6 +60,8 @@ impl VeloceApp {
                 error: None,
             },
             pending_token: keyring_get(),
+            plugins: PluginManager::builtin(),
+            show_plugins: false,
         }
     }
 
@@ -149,13 +154,20 @@ impl eframe::App for VeloceApp {
             Screen::Chat { net, state } => {
                 // Drain des events — intercepter AuthFailed avant apply_event.
                 while let Ok(ev) = net.events.try_recv() {
+                    self.plugins.dispatch_event(&ev);
                     if let Event::AuthFailed(msg) = ev {
                         auth_failed = Some(msg);
                         continue;
                     }
                     apply_event(state, ev);
                 }
-                draw_chat(ctx, net, state.as_mut());
+                draw_chat(
+                    ctx,
+                    net,
+                    state.as_mut(),
+                    &mut self.plugins,
+                    &mut self.show_plugins,
+                );
             }
         }
 
@@ -214,11 +226,20 @@ fn apply_event(state: &mut ChatState, ev: Event) {
     }
 }
 
-fn draw_chat(ctx: &egui::Context, net: &NetHandle, state: &mut ChatState) {
+fn draw_chat(
+    ctx: &egui::Context,
+    net: &NetHandle,
+    state: &mut ChatState,
+    plugins: &mut crate::plugins::PluginManager,
+    show_plugins: &mut bool,
+) {
     egui::SidePanel::left("guilds")
         .exact_width(180.0)
         .show(ctx, |ui| {
             ui.heading("Serveurs");
+            if ui.button("⚙ Plugins").clicked() {
+                *show_plugins = !*show_plugins;
+            }
             let status = match &state.connection {
                 Some(ConnectionState::Connected) => "● connecté",
                 Some(ConnectionState::Reconnecting) => "○ reconnexion…",
@@ -275,9 +296,11 @@ fn draw_chat(ctx: &egui::Context, net: &NetHandle, state: &mut ChatState) {
             let send = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if send && !state.draft.trim().is_empty() {
                 if let Some(cid) = state.selected_channel.clone() {
+                    let mut content = state.draft.trim().to_string();
+                    plugins.apply_outgoing(&mut content);
                     net.send(Command::SendMessage {
                         channel_id: cid,
-                        content: state.draft.trim().to_string(),
+                        content,
                     });
                     state.draft.clear();
                 }
@@ -306,11 +329,23 @@ fn draw_chat(ctx: &egui::Context, net: &NetHandle, state: &mut ChatState) {
                                 .strong()
                                 .color(Color32::LIGHT_BLUE),
                         );
-                        ui.label(spans_to_job(&parse_markdown(&m.content)));
+                        let mut content = m.content.clone();
+                        plugins.apply_render(&mut content);
+                        ui.label(spans_to_job(&parse_markdown(&content)));
                     });
                 }
             });
     });
+
+    if *show_plugins {
+        let mut open = true;
+        egui::Window::new("Plugins")
+            .open(&mut open)
+            .show(ctx, |ui| plugins.settings_ui(ui));
+        if !open {
+            *show_plugins = false;
+        }
+    }
 }
 
 #[cfg(test)]

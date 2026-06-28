@@ -4,8 +4,9 @@ use crate::identity::super_properties_json;
 use crate::models::{GatewayPayload, Guild, Message, User};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::time::Duration;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
@@ -32,6 +33,27 @@ fn build_heartbeat(seq: Option<u64>) -> Value {
     json!({ "op": 1, "d": seq })
 }
 
+/// Commande adressée à la tâche gateway (canal app → gateway, distinct du REST).
+#[derive(Debug, Clone)]
+pub enum GatewayCommand {
+    SubscribeGuild(crate::models::Snowflake),
+}
+
+/// Frame op 14 (« lazy guild request ») pour s'abonner aux events d'une guilde.
+/// API user non documentée — unique point de maintenance si le format change.
+pub fn build_guild_subscribe(guild_id: &str) -> Value {
+    json!({
+        "op": 14,
+        "d": {
+            "guild_id": guild_id,
+            "typing": true,
+            "activities": true,
+            "threads": false,
+            "channels": {}
+        }
+    })
+}
+
 /// Pure backoff helper: doubles current_ms, capped at 30 s.
 pub fn next_backoff(current_ms: u64) -> u64 {
     (current_ms * 2).min(30_000)
@@ -42,9 +64,11 @@ pub async fn run_gateway(
     token: String,
     event_tx: UnboundedSender<Event>,
     mut shutdown: watch::Receiver<bool>,
+    mut gw_cmd_rx: UnboundedReceiver<GatewayCommand>,
 ) {
     let mut state = GatewayState::default();
     let mut backoff_ms = 1000u64;
+    let mut subscribed: HashSet<crate::models::Snowflake> = HashSet::new();
     loop {
         if *shutdown.borrow() {
             return;
@@ -56,10 +80,12 @@ pub async fn run_gateway(
             &event_tx,
             &mut shutdown,
             &mut backoff_ms,
+            &mut gw_cmd_rx,
+            &mut subscribed,
         )
         .await
         {
-            Ok(()) => return, // shutdown propre
+            Ok(()) => return,
             Err(()) => {
                 let _ = event_tx.send(Event::Connection(ConnectionState::Reconnecting));
                 tokio::select! {
@@ -79,6 +105,8 @@ async fn connect_once(
     event_tx: &UnboundedSender<Event>,
     shutdown: &mut watch::Receiver<bool>,
     backoff: &mut u64,
+    gw_cmd_rx: &mut UnboundedReceiver<GatewayCommand>,
+    subscribed: &mut HashSet<crate::models::Snowflake>,
 ) -> std::result::Result<(), ()> {
     let (ws, _) = tokio_tungstenite::connect_async(GATEWAY_URL)
         .await
@@ -89,6 +117,7 @@ async fn connect_once(
     let mut hb = tokio::time::interval(Duration::from_secs(45));
     hb.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut hb_started = false;
+    let mut gw_cmd_open = true;
 
     loop {
         tokio::select! {
@@ -168,8 +197,39 @@ async fn connect_once(
                     }
                     GatewayAction::Dispatch(t) => {
                         dispatch_event(&t, &payload.d, state, event_tx);
+                        if t == "READY" {
+                            for gid in subscribed.iter() {
+                                if write
+                                    .send(WsMessage::Text(
+                                        build_guild_subscribe(gid).to_string().into(),
+                                    ))
+                                    .await
+                                    .is_err()
+                                {
+                                    return Err(());
+                                }
+                            }
+                        }
                     }
                     _ => {}
+                }
+            }
+            cmd = gw_cmd_rx.recv(), if gw_cmd_open => {
+                match cmd {
+                    Some(GatewayCommand::SubscribeGuild(gid)) => {
+                        subscribed.insert(gid.clone());
+                        if hb_started
+                            && write
+                                .send(WsMessage::Text(
+                                    build_guild_subscribe(&gid).to_string().into(),
+                                ))
+                                .await
+                                .is_err()
+                        {
+                            return Err(());
+                        }
+                    }
+                    None => gw_cmd_open = false, // émetteur lâché : ne plus interroger ce canal
                 }
             }
         }
@@ -237,5 +297,16 @@ mod tests {
         assert_eq!(next_backoff(1000), 2000);
         assert_eq!(next_backoff(20_000), 30_000);
         assert_eq!(next_backoff(30_000), 30_000);
+    }
+
+    #[test]
+    fn guild_subscribe_op14() {
+        let v = build_guild_subscribe("123");
+        assert_eq!(v["op"], 14);
+        assert_eq!(v["d"]["guild_id"], "123");
+        assert_eq!(v["d"]["typing"], true);
+        assert!(v["d"]["activities"].is_boolean());
+        assert!(v["d"]["threads"].is_boolean());
+        assert!(v["d"]["channels"].is_object());
     }
 }

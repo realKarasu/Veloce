@@ -15,5 +15,5 @@ pub mod error;
 pub mod gateway;
 pub mod rest;
 pub use error::{DiscordError, Result};
-pub use gateway::run_gateway;
+pub use gateway::{run_gateway, GatewayCommand};
 pub use rest::RestClient;

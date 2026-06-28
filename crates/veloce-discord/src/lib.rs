@@ -12,6 +12,8 @@ pub use events::{ConnectionState, Event};
 pub use gateway_state::{GatewayAction, GatewayState};
 
 pub mod error;
+pub mod gateway;
 pub mod rest;
 pub use error::{DiscordError, Result};
+pub use gateway::run_gateway;
 pub use rest::RestClient;

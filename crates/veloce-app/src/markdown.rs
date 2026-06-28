@@ -20,6 +20,7 @@ impl Span {
 }
 
 /// Marqueurs reconnus (ordre = priorité de détection).
+#[allow(clippy::type_complexity)]
 const MARKERS: &[(&str, fn(&mut Span))] = &[
     ("**", |s| s.bold = true),
     ("~~", |s| s.strike = true),

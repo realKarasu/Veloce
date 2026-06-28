@@ -94,7 +94,7 @@ async fn handle_command(rest: &RestClient, cmd: Command, out: &Sender<Event>, ct
             .map(Event::MessageCreated)
             .map_err(|e| e.to_string()),
     };
-    let ev = result.unwrap_or_else(|e| Event::Error(e));
+    let ev = result.unwrap_or_else(Event::Error);
     let _ = out.send(ev);
     ctx.request_repaint();
 }

@@ -905,6 +905,15 @@ git commit -m "feat(discord): client REST + erreurs + parsing retry-after"
 
 ### Task 7 : Connexion Gateway (WebSocket)
 
+> **Correctif post-revue (commit e6ab391) :** le code de référence ci-dessous
+> contenait 3 défauts de reconnexion, corrigés à l'implémentation : (1) backoff
+> réinitialisé à 1000 ms une fois la connexion établie (helper pur `next_backoff`
+> + `*backoff = 1000` après HELLO) ; (2) garde du heartbeat sur un drapeau de
+> session local `hb_started` (et non le champ d'état persistant) pour éviter un
+> heartbeat avant HELLO à la reconnexion ; (3) `Some(Err(_))` du flux déclenche
+> une reconnexion (plus de busy-loop) ; (4) `Connection(Connected)` émis même si
+> `READY.user` ne se désérialise pas. Voir `crates/veloce-discord/src/gateway.rs`.
+
 **Files:**
 - Create: `crates/veloce-discord/src/gateway.rs`
 - Modify: `crates/veloce-discord/src/lib.rs`

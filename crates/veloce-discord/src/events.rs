@@ -1,4 +1,4 @@
-use crate::models::{Channel, Guild, Message, Snowflake, User};
+use crate::models::{Channel, Guild, Message, Role, Snowflake, User};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionState {
@@ -15,9 +15,13 @@ pub enum Event {
         user: User,
         guilds: Vec<Guild>,
     },
-    ChannelsLoaded {
+    GuildChannels {
         guild_id: Snowflake,
         channels: Vec<Channel>,
+        roles: Vec<Role>,
+        owner_id: Snowflake,
+        member_roles: Vec<Snowflake>,
+        me_id: Snowflake,
     },
     MessagesLoaded {
         channel_id: Snowflake,

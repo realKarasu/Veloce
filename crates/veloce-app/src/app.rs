@@ -3,16 +3,22 @@ use crate::net::{spawn_net, NetHandle};
 use crate::plugins::PluginManager;
 use eframe::egui;
 use egui::{text::LayoutJob, Color32, FontId, RichText, TextFormat};
-use veloce_discord::{Channel, Command, ConnectionState, Event, Guild, Message, User};
+use veloce_discord::{
+    build_channel_tree, visible_channel_ids, Channel, Command, ConnectionState, Event, Guild,
+    Message, TreeRow, User,
+};
 
 const KEYRING_SERVICE: &str = "veloce";
 const KEYRING_USER: &str = "token";
 
-/// Ne conserve que les salons texte (type 0), triés par position.
-pub fn text_channels_sorted(mut channels: Vec<Channel>) -> Vec<Channel> {
-    channels.retain(|c| c.kind == 0);
-    channels.sort_by_key(|c| c.position.unwrap_or(0));
-    channels
+fn channel_icon(kind: u8) -> &'static str {
+    match kind {
+        2 => "🔊",  // vocal
+        5 => "📢",  // annonce
+        13 => "🎙",  // stage
+        15 => "💬", // forum
+        _ => "#",   // texte et autres
+    }
 }
 
 /// True si le message doit être ajouté (pas déjà présent par id).
@@ -25,6 +31,7 @@ struct ChatState {
     user: Option<User>,
     guilds: Vec<Guild>,
     channels: Vec<Channel>,
+    channel_tree: Vec<TreeRow>,
     messages: Vec<Message>,
     selected_guild: Option<String>,
     selected_channel: Option<String>,
@@ -189,9 +196,25 @@ fn apply_event(state: &mut ChatState, ev: Event) {
             state.user = Some(user);
             state.guilds = guilds;
         }
-        Event::ChannelsLoaded { guild_id, channels } => {
+        Event::GuildChannels {
+            guild_id,
+            channels,
+            roles,
+            owner_id,
+            member_roles,
+            me_id,
+        } => {
             if Some(&guild_id) == state.selected_guild.as_ref() {
-                state.channels = text_channels_sorted(channels);
+                let visible = visible_channel_ids(
+                    &channels,
+                    &roles,
+                    &owner_id,
+                    &member_roles,
+                    &me_id,
+                    &guild_id,
+                );
+                state.channel_tree = build_channel_tree(&channels, &visible);
+                state.channels = channels;
                 state.last_error = None;
             }
         }
@@ -256,6 +279,7 @@ fn draw_chat(
                     {
                         state.selected_guild = Some(g.id.clone());
                         state.channels.clear();
+                        state.channel_tree.clear();
                         net.subscribe_guild(g.id.clone());
                         net.send(Command::SelectGuild(g.id));
                     }
@@ -269,18 +293,30 @@ fn draw_chat(
             ui.heading("Salons");
             ui.separator();
             egui::ScrollArea::vertical().show(ui, |ui| {
-                for c in state.channels.clone() {
-                    let name = c.name.clone().unwrap_or_else(|| c.id.clone());
-                    if ui
-                        .selectable_label(
-                            state.selected_channel.as_ref() == Some(&c.id),
-                            format!("# {name}"),
-                        )
-                        .clicked()
-                    {
-                        state.selected_channel = Some(c.id.clone());
-                        state.messages.clear();
-                        net.send(Command::FetchHistory(c.id));
+                for row in state.channel_tree.clone() {
+                    match row {
+                        TreeRow::Category { name, .. } => {
+                            ui.add_space(4.0);
+                            ui.label(egui::RichText::new(name.to_uppercase()).small().strong());
+                        }
+                        TreeRow::Channel(c) => {
+                            let icon = channel_icon(c.kind);
+                            let label = format!(
+                                "{icon} {}",
+                                c.name.clone().unwrap_or_else(|| c.id.clone())
+                            );
+                            let selectable = matches!(c.kind, 0 | 5 | 15);
+                            let selected = state.selected_channel.as_ref() == Some(&c.id);
+                            let resp = ui.add_enabled(
+                                selectable,
+                                egui::SelectableLabel::new(selected, label),
+                            );
+                            if resp.clicked() {
+                                state.selected_channel = Some(c.id.clone());
+                                state.messages.clear();
+                                net.send(Command::FetchHistory(c.id.clone()));
+                            }
+                        }
                     }
                 }
             });
@@ -354,19 +390,7 @@ fn draw_chat(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use veloce_discord::{Channel, User};
-
-    fn ch(id: &str, kind: u8, pos: i32) -> Channel {
-        Channel {
-            id: id.into(),
-            name: Some(id.into()),
-            kind,
-            guild_id: None,
-            position: Some(pos),
-            parent_id: None,
-            permission_overwrites: Vec::new(),
-        }
-    }
+    use veloce_discord::User;
 
     fn make_msg(id: &str) -> Message {
         Message {
@@ -381,14 +405,6 @@ mod tests {
             },
             timestamp: None,
         }
-    }
-
-    #[test]
-    fn ne_garde_que_les_salons_texte_tries_par_position() {
-        let input = vec![ch("b", 0, 2), ch("voc", 2, 0), ch("a", 0, 1)];
-        let out = text_channels_sorted(input);
-        let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
-        assert_eq!(ids, vec!["a", "b"]);
     }
 
     #[test]

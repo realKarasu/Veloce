@@ -49,12 +49,16 @@ pub fn spawn_net(token: String, ctx: Context) -> NetHandle {
                     return;
                 }
             };
-            if let Err(e) = rest.current_user().await {
-                let _ =
-                    event_out.send(Event::AuthFailed(format!("Authentification échouée : {e}")));
-                ctx.request_repaint();
-                return;
-            }
+            let me = match rest.current_user().await {
+                Ok(u) => u,
+                Err(e) => {
+                    let _ = event_out
+                        .send(Event::AuthFailed(format!("Authentification échouée : {e}")));
+                    ctx.request_repaint();
+                    return;
+                }
+            };
+            let me_id = me.id.clone();
 
             // tâche gateway
             let gw_token = token.clone();
@@ -68,7 +72,7 @@ pub fn spawn_net(token: String, ctx: Context) -> NetHandle {
                         ctx.request_repaint();
                     }
                     Some(cmd) = cmd_rx.recv() => {
-                        handle_command(&rest, cmd, &event_out, &ctx).await;
+                        handle_command(&rest, cmd, &event_out, &ctx, &me_id).await;
                     }
                     else => break,
                 }
@@ -84,18 +88,37 @@ pub fn spawn_net(token: String, ctx: Context) -> NetHandle {
     }
 }
 
-async fn handle_command(rest: &RestClient, cmd: Command, out: &Sender<Event>, ctx: &Context) {
+async fn handle_command(
+    rest: &RestClient,
+    cmd: Command,
+    out: &Sender<Event>,
+    ctx: &Context,
+    me_id: &str,
+) {
     let result: Result<Event, String> = match cmd {
-        Command::SelectGuild(guild_id) => rest
-            .guild_channels(&guild_id)
-            .await
-            .map(|channels| Event::ChannelsLoaded { guild_id, channels })
-            .map_err(|e| e.to_string()),
+        Command::SelectGuild(guild_id) => {
+            let (channels, detail, member) = tokio::join!(
+                rest.guild_channels(&guild_id),
+                rest.guild(&guild_id),
+                rest.current_member(&guild_id),
+            );
+            match (channels, detail, member) {
+                (Ok(channels), Ok(detail), Ok(member)) => Ok(Event::GuildChannels {
+                    guild_id,
+                    channels,
+                    roles: detail.roles,
+                    owner_id: detail.owner_id,
+                    member_roles: member.roles,
+                    me_id: me_id.to_string(),
+                }),
+                _ => Err("Impossible de charger les salons du serveur".to_string()),
+            }
+        }
         Command::FetchHistory(channel_id) => rest
             .channel_messages(&channel_id, 50)
             .await
             .map(|mut messages| {
-                messages.reverse(); // l'API renvoie du plus récent au plus ancien
+                messages.reverse();
                 Event::MessagesLoaded {
                     channel_id,
                     messages,

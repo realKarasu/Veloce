@@ -11,6 +11,9 @@ pub use commands::Command;
 pub use events::{ConnectionState, Event};
 pub use gateway_state::{GatewayAction, GatewayState};
 
+pub mod perms;
+pub use perms::{can_view_channel, visible_channel_ids};
+
 pub mod error;
 pub mod gateway;
 pub mod rest;

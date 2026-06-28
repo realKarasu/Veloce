@@ -14,6 +14,9 @@ pub use gateway_state::{GatewayAction, GatewayState};
 pub mod perms;
 pub use perms::{can_view_channel, visible_channel_ids};
 
+pub mod channel_tree;
+pub use channel_tree::{build_channel_tree, TreeRow};
+
 pub mod error;
 pub mod gateway;
 pub mod rest;

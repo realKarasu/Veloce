@@ -1,0 +1,3 @@
+{ "id": "111", "channel_id": "222", "content": "salut **monde**",
+  "timestamp": "2026-06-28T10:00:00.000000+00:00",
+  "author": { "id": "333", "username": "alice", "global_name": "Alice", "discriminator": "0" } }

@@ -24,17 +24,32 @@ pub fn build_font_definitions() -> FontDefinitions {
         ))),
     );
     fonts.font_data.insert(
+        "noto_sans_symbols2".to_owned(),
+        Arc::new(FontData::from_static(include_bytes!(
+            "../assets/fonts/NotoSansSymbols2.ttf"
+        ))),
+    );
+    fonts.font_data.insert(
+        "noto_sans_math".to_owned(),
+        Arc::new(FontData::from_static(include_bytes!(
+            "../assets/fonts/NotoSansMath.ttf"
+        ))),
+    );
+    fonts.font_data.insert(
         "noto_emoji".to_owned(),
         Arc::new(FontData::from_static(include_bytes!(
             "../assets/fonts/NotoEmoji.ttf"
         ))),
     );
 
+    // Fallback : texte -> CJK -> symboles -> lettres décoratives (math) -> emoji N&B.
     fonts.families.insert(
         FontFamily::Proportional,
         vec![
             "noto_sans".to_owned(),
             "noto_sans_cjk".to_owned(),
+            "noto_sans_symbols2".to_owned(),
+            "noto_sans_math".to_owned(),
             "noto_emoji".to_owned(),
         ],
     );
@@ -43,6 +58,8 @@ pub fn build_font_definitions() -> FontDefinitions {
         vec![
             "noto_sans_mono".to_owned(),
             "noto_sans_cjk".to_owned(),
+            "noto_sans_symbols2".to_owned(),
+            "noto_sans_math".to_owned(),
             "noto_emoji".to_owned(),
         ],
     );
@@ -63,7 +80,14 @@ mod tests {
     #[test]
     fn definitions_contiennent_les_4_polices() {
         let f = build_font_definitions();
-        for key in ["noto_sans", "noto_sans_mono", "noto_sans_cjk", "noto_emoji"] {
+        for key in [
+            "noto_sans",
+            "noto_sans_mono",
+            "noto_sans_cjk",
+            "noto_sans_symbols2",
+            "noto_sans_math",
+            "noto_emoji",
+        ] {
             assert!(f.font_data.contains_key(key), "police manquante : {key}");
         }
     }

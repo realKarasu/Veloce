@@ -37,6 +37,25 @@ Au premier lancement, collez votre token Discord ; il est mémorisé dans le
 trousseau de l'OS pour les lancements suivants. Un token invalide ramène à
 l'écran de saisie (et purge le token mémorisé).
 
+## Plugins
+
+L'extensibilité dans l'esprit de Vencord : des plugins **écrits en Rust**,
+compilés dans le binaire et **activables/désactivables à l'exécution**. Le
+bouton **« ⚙ Plugins »** ouvre la fenêtre de gestion (toggle + réglages par
+plugin) ; l'ensemble activé **persiste** entre les sessions.
+
+Plugins intégrés en v1 :
+
+- **TextReplace** — règles *texte → remplacement* appliquées aux messages
+  envoyés (réglables).
+- **MessageCounter** — compte les messages reçus pendant la session.
+- **Loud** — met les messages affichés en MAJUSCULES (démo cosmétique).
+
+Ajouter un plugin = implémenter le trait `Plugin`
+(`crates/veloce-app/src/plugins/`) avec les hooks `on_event` /
+`on_outgoing_message` / `on_render_content` / `settings_ui`, puis l'enregistrer
+dans `PluginManager::builtin()`.
+
 ## Limitations connues
 
 - **Temps réel sur gros serveurs :** pour les comptes utilisateur, Discord peut
@@ -47,12 +66,16 @@ l'écran de saisie (et purge le token mémorisé).
   peuvent ne pas se mettre à jour.
 - **Identité client :** le `client_build_number` des super-properties doit être
   maintenu à jour (un seul endroit : `crates/veloce-discord/src/identity.rs`).
+- **Plugins :** seul l'**ensemble activé** persiste ; les réglages internes d'un
+  plugin (ex. les règles de TextReplace) reviennent à leur défaut au
+  redémarrage.
 
 ## Hors périmètre v0.1 (à venir)
 
 Voix/WebRTC · images, embeds et pièces jointes riches · réactions · threads ·
-notifications système · recherche · **système de plugins/thèmes complet** (la
-v0.1 en pose déjà la couture via les types `Event`/`Command` publics).
+notifications système · recherche · **thèmes** (CSS-like) · **chargement
+dynamique** de plugins (WASM/.so) · injection de `Command` par les plugins. (Le
+système de plugins statiques, lui, est déjà là — voir ci-dessus.)
 
 ## Architecture
 

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use veloce_discord::Event;
 
 pub trait Plugin {
@@ -66,6 +67,36 @@ impl PluginManager {
             if self.enabled.get(p.name()).copied().unwrap_or(false) {
                 p.on_render_content(content);
             }
+        }
+    }
+}
+
+/// Désérialise l'état activé ; JSON invalide → map vide.
+fn parse_enabled(s: &str) -> HashMap<String, bool> {
+    serde_json::from_str(s).unwrap_or_default()
+}
+
+fn config_path() -> Option<PathBuf> {
+    directories::ProjectDirs::from("", "", "veloce").map(|d| d.config_dir().join("plugins.json"))
+}
+
+impl PluginManager {
+    /// Charge l'état activé persistant depuis le disque (remplace la map en mémoire).
+    /// À appeler AVANT `register` pour que l'état persistant l'emporte sur `default_enabled`.
+    pub fn load_persisted(&mut self) {
+        if let Some(s) = config_path().and_then(|p| std::fs::read_to_string(p).ok()) {
+            self.enabled = parse_enabled(&s);
+        }
+    }
+
+    /// Écrit l'état activé sur disque (échecs d'I/O tolérés silencieusement).
+    pub fn save(&self) {
+        let Some(path) = config_path() else { return };
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string_pretty(&self.enabled) {
+            let _ = std::fs::write(path, json);
         }
     }
 }
@@ -167,6 +198,15 @@ mod tests {
         let mut s2 = String::new();
         m.apply_outgoing(&mut s2);
         assert_eq!(s2, "b");
+    }
+
+    #[test]
+    fn parse_enabled_valide_et_invalide() {
+        let m = parse_enabled(r#"{"A":true,"B":false}"#);
+        assert_eq!(m.get("A"), Some(&true));
+        assert_eq!(m.get("B"), Some(&false));
+        // JSON invalide → map vide (pas de panique).
+        assert!(parse_enabled("pas du json").is_empty());
     }
 
     #[test]

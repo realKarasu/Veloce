@@ -1,4 +1,5 @@
 mod app;
+mod fonts;
 mod markdown;
 mod net;
 mod plugins;
@@ -13,6 +14,9 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Veloce",
         options,
-        Box::new(|_cc| Ok(Box::new(VeloceApp::new()))),
+        Box::new(|cc| {
+            fonts::setup_fonts(&cc.egui_ctx);
+            Ok(Box::new(VeloceApp::new()))
+        }),
     )
 }

@@ -1,6 +1,7 @@
 mod app;
 mod markdown;
 mod net;
+mod plugins;
 
 use app::VeloceApp;
 

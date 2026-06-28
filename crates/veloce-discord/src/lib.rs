@@ -10,3 +10,8 @@ pub mod identity;
 pub use commands::Command;
 pub use events::{ConnectionState, Event};
 pub use gateway_state::{GatewayAction, GatewayState};
+
+pub mod error;
+pub mod rest;
+pub use error::{DiscordError, Result};
+pub use rest::RestClient;

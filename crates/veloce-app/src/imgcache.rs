@@ -100,6 +100,7 @@ impl egui::load::BytesLoader for DiskCacheLoader {
                     map.insert(uri_owned, Entry::Failed);
                 }
             }
+            drop(map);
             ctx2.request_repaint();
         });
 

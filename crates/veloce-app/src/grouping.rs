@@ -86,4 +86,30 @@ mod tests {
         ];
         assert_eq!(group_flags(&m), vec![true, true]);
     }
+
+    #[test]
+    fn timestamp_absent_coupe_groupe() {
+        let m1 = msg("1", "alice", "2026-06-29T14:00:00+00:00");
+        let m2 = Message {
+            id: "2".into(),
+            channel_id: "c".into(),
+            content: String::new(),
+            author: User {
+                id: "alice".into(),
+                username: "alice".into(),
+                global_name: None,
+                discriminator: None,
+                avatar: None,
+            },
+            timestamp: None,
+            edited_timestamp: None,
+            mentions: vec![],
+            mention_roles: vec![],
+            attachments: vec![],
+            embeds: vec![],
+            referenced_message: None,
+        };
+        let m = vec![m1, m2];
+        assert_eq!(group_flags(&m), vec![true, true]);
+    }
 }

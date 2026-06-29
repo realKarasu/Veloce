@@ -295,6 +295,36 @@ mod tests {
     }
 
     #[test]
+    fn is_image_par_content_type_sans_extension() {
+        let a = Attachment {
+            id: "1".into(),
+            filename: "blob".into(),
+            content_type: Some("image/png".into()),
+            url: "u".into(),
+            proxy_url: "u".into(),
+            size: 0,
+            width: None,
+            height: None,
+        };
+        assert!(a.is_image());
+    }
+
+    #[test]
+    fn non_image_content_type_retourne_faux() {
+        let a = Attachment {
+            id: "1".into(),
+            filename: "blob".into(),
+            content_type: Some("application/octet-stream".into()),
+            url: "u".into(),
+            proxy_url: "u".into(),
+            size: 0,
+            width: None,
+            height: None,
+        };
+        assert!(!a.is_image());
+    }
+
+    #[test]
     fn message_minimal_reste_valide() {
         // Rétro-compat : un message sans les nouveaux champs se désérialise.
         let json = r#"{ "id":"1","channel_id":"2","content":"hi",

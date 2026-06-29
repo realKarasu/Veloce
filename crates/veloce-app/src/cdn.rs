@@ -44,9 +44,11 @@ mod tests {
     #[test]
     fn defaut_systeme_pseudo_et_legacy() {
         // discriminator "0" (nouveau système) → (id >> 22) % 6
-        let url = default_avatar_url("80351110224678912", Some("0"));
-        assert!(url.starts_with("https://cdn.discordapp.com/embed/avatars/"));
-        assert!(url.ends_with(".png"));
+        // (80351110224678912 >> 22) % 6 == 5 — assertion exacte pour détecter une régression du calcul d'index
+        assert_eq!(
+            default_avatar_url("80351110224678912", Some("0")),
+            "https://cdn.discordapp.com/embed/avatars/5.png"
+        );
         // legacy : discriminator % 5
         assert_eq!(
             default_avatar_url("1", Some("1337")),

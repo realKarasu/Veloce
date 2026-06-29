@@ -1,4 +1,5 @@
 mod app;
+mod cdn;
 mod emoji;
 mod fonts;
 mod markdown;

@@ -2,6 +2,7 @@ mod app;
 mod cdn;
 mod emoji;
 mod fonts;
+mod grouping;
 mod markdown;
 mod net;
 mod plugins;

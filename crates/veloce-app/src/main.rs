@@ -3,6 +3,7 @@ mod cdn;
 mod emoji;
 mod fonts;
 mod grouping;
+mod imgcache;
 mod markdown;
 mod net;
 mod plugins;
@@ -21,6 +22,8 @@ fn main() -> eframe::Result<()> {
         Box::new(|cc| {
             fonts::setup_fonts(&cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
+            cc.egui_ctx
+                .add_bytes_loader(std::sync::Arc::new(crate::imgcache::DiskCacheLoader::new()));
             Ok(Box::new(VeloceApp::new()))
         }),
     )

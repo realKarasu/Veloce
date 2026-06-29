@@ -25,4 +25,5 @@ keyring = "3"
 anyhow = "1"
 tracing-subscriber = "0.3"
 directories = "5"
+ehttp = "0.5"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

@@ -1,4 +1,4 @@
-﻿/// (code twemoji, octets PNG) — emojis Unicode courants embarqués pour un rendu instantané.
+/// (code twemoji, octets PNG) — emojis Unicode courants embarqués pour un rendu instantané.
 pub const EMBEDDED: &[(&str, &[u8])] = &[
     ("1f31f", include_bytes!("../assets/emoji/1f31f.png")),
     ("1f389", include_bytes!("../assets/emoji/1f389.png")),

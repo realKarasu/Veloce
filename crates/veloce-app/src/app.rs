@@ -145,6 +145,8 @@ fn rich_label_row(
             .layout(egui::Layout::left_to_right(egui::Align::Center)),
     );
     content.spacing_mut().item_spacing.x = 3.0;
+    // Les noms ne sont pas du texte sélectionnable → pas de curseur « I-beam ».
+    content.style_mut().interaction.selectable_labels = false;
     if let Some(ic) = icon {
         content.label(RichText::new(ic).color(color));
     }
@@ -158,7 +160,12 @@ fn rich_label_row(
             }
         }
     }
-    resp
+    // Curseur « main » sur les lignes cliquables.
+    if enabled {
+        resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+    } else {
+        resp
+    }
 }
 
 /// RichText stylé selon un span markdown.

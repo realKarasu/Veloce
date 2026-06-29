@@ -105,75 +105,6 @@ fn keyring_clear() {
 
 const EMOJI_SIZE: f32 = 20.0;
 
-/// Ligne cliquable de la sidebar : glyphe icône optionnel + nom avec emojis couleur.
-/// Le fond de sélection/survol est peint AVANT le contenu via un slot pré-réservé.
-fn rich_label_row(
-    ui: &mut egui::Ui,
-    icon: Option<&str>,
-    name: &str,
-    selected: bool,
-    enabled: bool,
-) -> egui::Response {
-    // Réserver un slot de forme pour le fond — sera peint sous le contenu.
-    let bg_idx = ui.painter().add(egui::Shape::Noop);
-
-    // Couleur du texte : atténuée pour les éléments non-cliquables.
-    let text_color = if enabled {
-        ui.visuals().text_color()
-    } else {
-        ui.visuals().widgets.noninteractive.fg_stroke.color
-    };
-
-    let inner = ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 2.0;
-        if let Some(ic) = icon {
-            ui.label(RichText::new(ic).color(text_color));
-        }
-        for seg in split_emojis(name) {
-            match seg {
-                EmojiSeg::Text(t) => {
-                    ui.label(RichText::new(t).size(14.0).color(text_color));
-                }
-                EmojiSeg::Emoji { url } => {
-                    ui.add(egui::Image::new(url).fit_to_exact_size(egui::vec2(18.0, 18.0)));
-                }
-            }
-        }
-    });
-
-    // Toute la ligne (pleine largeur) est cliquable. On interagit explicitement
-    // via `ui.interact` avec un id propre : `.interact()` sur la réponse d'un
-    // layout `horizontal` ne détecte pas le clic de façon fiable.
-    let row_rect = egui::Rect::from_min_size(
-        inner.response.rect.min,
-        egui::vec2(
-            ui.available_width().max(inner.response.rect.width()),
-            inner.response.rect.height(),
-        ),
-    );
-    let sense = if enabled {
-        egui::Sense::click()
-    } else {
-        egui::Sense::hover()
-    };
-    let resp = ui.interact(row_rect, inner.response.id.with("row_click"), sense);
-
-    if selected || (enabled && resp.hovered()) {
-        let bg = if selected {
-            ui.visuals().selection.bg_fill
-        } else {
-            ui.visuals().widgets.hovered.bg_fill
-        };
-        // Remplir le slot pré-réservé → fond peint sous le texte.
-        ui.painter().set(
-            bg_idx,
-            egui::Shape::rect_filled(resp.rect, 4.0, bg.gamma_multiply(0.4)),
-        );
-    }
-
-    resp
-}
-
 /// RichText stylé selon un span markdown.
 fn span_rich(text: &str, span: &Span) -> RichText {
     let mut rt = RichText::new(text).size(14.0);
@@ -370,8 +301,10 @@ fn draw_chat(
             ui.separator();
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for g in state.guilds.clone() {
-                    let selected = state.selected_guild.as_ref() == Some(&g.id);
-                    if rich_label_row(ui, None, &g.name, selected, true).clicked() {
+                    if ui
+                        .selectable_label(state.selected_guild.as_ref() == Some(&g.id), &g.name)
+                        .clicked()
+                    {
                         state.selected_guild = Some(g.id.clone());
                         state.channels.clear();
                         state.channel_tree.clear();
@@ -398,14 +331,12 @@ fn draw_chat(
                             let selectable = matches!(c.kind, 0 | 5 | 15);
                             let selected = state.selected_channel.as_ref() == Some(&c.id);
                             let name = c.name.clone().unwrap_or_else(|| c.id.clone());
-                            let resp = rich_label_row(
-                                ui,
-                                Some(channel_icon(c.kind)),
-                                &name,
-                                selected,
+                            let label = format!("{} {name}", channel_icon(c.kind));
+                            let resp = ui.add_enabled(
                                 selectable,
+                                egui::SelectableLabel::new(selected, label),
                             );
-                            if selectable && resp.clicked() {
+                            if resp.clicked() {
                                 state.selected_channel = Some(c.id.clone());
                                 state.messages.clear();
                                 net.send(Command::FetchHistory(c.id.clone()));

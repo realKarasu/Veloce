@@ -478,6 +478,7 @@ fn draw_chat(
         }
         egui::ScrollArea::vertical()
             .stick_to_bottom(true)
+            .auto_shrink([false, false])
             .show(ui, |ui| {
                 let flags = group_flags(&state.messages);
                 for (i, m) in state.messages.iter().enumerate() {
@@ -494,8 +495,10 @@ fn draw_chat(
                                 );
                             }
                         });
-                        // Colonne contenu.
+                        // Colonne contenu — occupe toute la largeur restante pour
+                        // que le texte s'enroule sur la pleine largeur du panneau.
                         ui.vertical(|ui| {
+                            ui.set_width(ui.available_width());
                             if header {
                                 ui.horizontal(|ui| {
                                     let name = m

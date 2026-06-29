@@ -39,16 +39,34 @@ pub fn parse_epoch(iso: &str) -> Option<i64> {
     Some(days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + s)
 }
 
+use chrono::{DateTime, Local};
+
+/// Heure locale (DST correct) pour l'affichage.
 pub fn format_timestamp(iso: &str) -> String {
-    match parts(iso) {
-        Some((y, mo, d, h, mi, _)) => format!("{d:02}/{mo:02}/{y:04} à {h:02}:{mi:02}"),
-        None => String::new(),
+    match DateTime::parse_from_rfc3339(iso) {
+        Ok(dt) => dt
+            .with_timezone(&Local)
+            .format("%d/%m/%Y à %H:%M")
+            .to_string(),
+        Err(_) => String::new(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::FixedOffset;
+
+    /// Pur et testable : formate `iso` (RFC3339) dans le décalage `offset`.
+    fn format_with_offset(iso: &str, offset: FixedOffset) -> String {
+        match DateTime::parse_from_rfc3339(iso) {
+            Ok(dt) => dt
+                .with_timezone(&offset)
+                .format("%d/%m/%Y à %H:%M")
+                .to_string(),
+            Err(_) => String::new(),
+        }
+    }
 
     #[test]
     fn epoch_connu() {
@@ -68,15 +86,33 @@ mod tests {
     }
 
     #[test]
-    fn format_lisible() {
+    fn format_avec_offset_utc() {
         assert_eq!(
-            format_timestamp("2026-06-29T14:23:45.000000+00:00"),
+            format_with_offset(
+                "2026-06-29T14:23:45.000000+00:00",
+                FixedOffset::east_opt(0).unwrap(),
+            ),
             "29/06/2026 à 14:23"
+        );
+    }
+
+    #[test]
+    fn format_avec_offset_utc_plus_2() {
+        assert_eq!(
+            format_with_offset(
+                "2026-06-29T14:23:45.000000+00:00",
+                FixedOffset::east_opt(2 * 3600).unwrap(),
+            ),
+            "29/06/2026 à 16:23"
         );
     }
 
     #[test]
     fn format_invalide_donne_vide() {
         assert_eq!(format_timestamp("xxx"), "");
+        assert_eq!(
+            format_with_offset("pas-une-date", FixedOffset::east_opt(0).unwrap()),
+            ""
+        );
     }
 }

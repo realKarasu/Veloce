@@ -192,6 +192,7 @@ fn span_rich(text: &str, span: &Span) -> RichText {
 }
 
 const IMAGE_MAX_W: f32 = 400.0;
+const IMAGE_MAX_H: f32 = 350.0;
 
 /// Affiche une image attachée, taille bornée en conservant le ratio. Clic →
 /// ouvre la visionneuse (renvoie `Some(url)` si cliquée).
@@ -200,10 +201,9 @@ fn render_attachment_image(ui: &mut egui::Ui, att: &Attachment) -> Option<String
         att.width.unwrap_or(0) as f32,
         att.height.unwrap_or(0) as f32,
     );
-    let size = if w > 0.0 && h > 0.0 && w > IMAGE_MAX_W {
-        egui::vec2(IMAGE_MAX_W, IMAGE_MAX_W * h / w)
-    } else if w > 0.0 && h > 0.0 {
-        egui::vec2(w, h)
+    let size = if w > 0.0 && h > 0.0 {
+        let scale = (IMAGE_MAX_W / w).min(IMAGE_MAX_H / h).min(1.0);
+        egui::vec2(w * scale, h * scale)
     } else {
         egui::vec2(IMAGE_MAX_W, IMAGE_MAX_W * 0.6)
     };
@@ -507,6 +507,9 @@ fn draw_chat(
                                     if let Some(ts) = &m.timestamp {
                                         let t = format_timestamp(ts);
                                         if !t.is_empty() {
+                                            ui.label(
+                                                RichText::new("·").small().color(Color32::GRAY),
+                                            );
                                             ui.label(RichText::new(t).small().color(Color32::GRAY));
                                         }
                                     }
@@ -556,12 +559,24 @@ fn draw_chat(
                 let screen = ctx.screen_rect();
                 ui.painter()
                     .rect_filled(screen, 0.0, Color32::from_black_alpha(220));
-                let resp = ui.allocate_rect(screen, egui::Sense::click());
-                ui.put(
-                    screen.shrink(40.0),
-                    egui::Image::new(&url).max_size(screen.size() * 0.9),
+
+                // Full-screen backdrop sense (click outside image closes).
+                let backdrop = ui.allocate_rect(screen, egui::Sense::click());
+
+                // Image centred in the viewport; rendered on top with its own sense
+                // (swallows the click so the backdrop doesn't fire when image is clicked).
+                let img_rect = screen.shrink(40.0);
+                let img_resp = ui.put(
+                    img_rect,
+                    egui::Image::new(&url)
+                        .max_size(screen.size() * 0.9)
+                        .sense(egui::Sense::click()),
                 );
-                if resp.clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+
+                // Close only on Escape, or backdrop-click outside the image.
+                let esc = ui.input(|i| i.key_pressed(egui::Key::Escape));
+                let backdrop_clicked_outside = backdrop.clicked() && !img_resp.hovered();
+                if esc || backdrop_clicked_outside {
                     close = true;
                 }
             });

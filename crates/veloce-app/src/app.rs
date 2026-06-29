@@ -286,6 +286,7 @@ fn draw_chat(
 ) {
     egui::SidePanel::left("guilds")
         .exact_width(180.0)
+        .resizable(false)
         .show(ctx, |ui| {
             ui.heading("Serveurs");
             if ui.button("⚙ Plugins").clicked() {
@@ -317,6 +318,7 @@ fn draw_chat(
 
     egui::SidePanel::left("channels")
         .exact_width(200.0)
+        .resizable(false)
         .show(ctx, |ui| {
             ui.heading("Salons");
             ui.separator();

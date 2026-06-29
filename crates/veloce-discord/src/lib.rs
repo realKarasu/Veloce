@@ -1,7 +1,10 @@
 //! veloce-discord — client Discord (REST + Gateway), UI-agnostique.
 
 pub mod models;
-pub use models::{Channel, GatewayPayload, Guild, Message, Overwrite, Role, Snowflake, User};
+pub use models::{
+    Attachment, Channel, Embed, EmbedAuthor, EmbedField, EmbedFooter, EmbedMedia, GatewayPayload,
+    Guild, Message, Overwrite, Role, Snowflake, User,
+};
 
 pub mod commands;
 pub mod events;

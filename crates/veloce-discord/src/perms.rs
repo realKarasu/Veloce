@@ -175,8 +175,10 @@ mod tests {
     fn visible_channel_ids_filtre() {
         let everyone = Role {
             id: "10".into(),
+            name: String::new(),
             permissions: V.to_string(),
             position: 0,
+            color: 0,
         };
         let chans = vec![
             chan("a", None, 0, vec![]), // visible (hérite base VIEW)

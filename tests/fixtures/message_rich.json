@@ -1,0 +1,24 @@
+{
+  "id": "555",
+  "channel_id": "222",
+  "content": "regarde <#222> et <@1> ||secret||",
+  "author": { "id": "1", "username": "alice", "global_name": "Alice", "avatar": "abc123" },
+  "timestamp": "2026-06-29T14:23:45.000000+00:00",
+  "edited_timestamp": null,
+  "mentions": [ { "id": "1", "username": "alice", "global_name": "Alice" } ],
+  "mention_roles": ["77"],
+  "attachments": [
+    { "id": "9", "filename": "photo.png", "content_type": "image/png",
+      "url": "https://cdn.example/photo.png", "proxy_url": "https://cdn.example/photo.png",
+      "size": 1024, "width": 800, "height": 600 }
+  ],
+  "embeds": [
+    { "type": "rich", "title": "Titre", "description": "Desc", "color": 5793266,
+      "fields": [ { "name": "F1", "value": "V1", "inline": true } ],
+      "footer": { "text": "pied" } }
+  ],
+  "referenced_message": {
+    "id": "100", "channel_id": "222", "content": "message parent",
+    "author": { "id": "2", "username": "bob" }
+  }
+}

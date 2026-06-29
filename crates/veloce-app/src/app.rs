@@ -1,13 +1,16 @@
+use crate::cdn::avatar_for;
 use crate::emoji::{split_emojis, EmojiSeg};
+use crate::grouping::group_flags;
 use crate::markdown::{parse_markdown, Span};
 use crate::net::{spawn_net, NetHandle};
 use crate::plugins::PluginManager;
+use crate::timestamp::format_timestamp;
 use eframe::egui;
 use egui::{Color32, RichText};
 use std::collections::HashSet;
 use veloce_discord::{
-    build_channel_tree, visible_channel_ids, Channel, Command, ConnectionState, Event, Guild,
-    Message, TreeRow, User,
+    build_channel_tree, visible_channel_ids, Attachment, Channel, Command, ConnectionState, Event,
+    Guild, Message, TreeRow, User,
 };
 
 const KEYRING_SERVICE: &str = "veloce";
@@ -40,6 +43,8 @@ struct ChatState {
     connection: Option<ConnectionState>,
     draft: String,
     last_error: Option<String>,
+    /// URL de l'image ouverte en grand (visionneuse), `None` = fermée.
+    viewer: Option<String>,
 }
 
 enum Screen {
@@ -184,6 +189,33 @@ fn span_rich(text: &str, span: &Span) -> RichText {
         rt = rt.strikethrough();
     }
     rt
+}
+
+const IMAGE_MAX_W: f32 = 400.0;
+
+/// Affiche une image attachée, taille bornée en conservant le ratio. Clic →
+/// ouvre la visionneuse (renvoie `Some(url)` si cliquée).
+fn render_attachment_image(ui: &mut egui::Ui, att: &Attachment) -> Option<String> {
+    let (w, h) = (
+        att.width.unwrap_or(0) as f32,
+        att.height.unwrap_or(0) as f32,
+    );
+    let size = if w > 0.0 && h > 0.0 && w > IMAGE_MAX_W {
+        egui::vec2(IMAGE_MAX_W, IMAGE_MAX_W * h / w)
+    } else if w > 0.0 && h > 0.0 {
+        egui::vec2(w, h)
+    } else {
+        egui::vec2(IMAGE_MAX_W, IMAGE_MAX_W * 0.6)
+    };
+    let resp = ui
+        .add(
+            egui::Image::new(&att.url)
+                .fit_to_exact_size(size)
+                .sense(egui::Sense::click())
+                .rounding(6.0),
+        )
+        .on_hover_cursor(egui::CursorIcon::PointingHand);
+    resp.clicked().then(|| att.url.clone())
 }
 
 /// Rend un message : markdown (via plugins) + emojis couleur inline.
@@ -438,6 +470,7 @@ fn draw_chat(
         });
     });
 
+    let mut clicked_image: Option<String> = None;
     egui::CentralPanel::default().show(ctx, |ui| {
         if let Some(err) = &state.last_error {
             ui.colored_label(Color32::LIGHT_RED, err.as_str());
@@ -446,23 +479,63 @@ fn draw_chat(
         egui::ScrollArea::vertical()
             .stick_to_bottom(true)
             .show(ui, |ui| {
-                for m in &state.messages {
-                    ui.horizontal_wrapped(|ui| {
-                        let name = m
-                            .author
-                            .global_name
-                            .clone()
-                            .unwrap_or_else(|| m.author.username.clone());
-                        ui.label(
-                            RichText::new(format!("{name}: "))
-                                .strong()
-                                .color(Color32::LIGHT_BLUE),
-                        );
-                        render_message(ui, &m.content, plugins);
+                let flags = group_flags(&state.messages);
+                for (i, m) in state.messages.iter().enumerate() {
+                    let header = flags[i];
+                    ui.horizontal(|ui| {
+                        // Gouttière avatar 40px.
+                        ui.allocate_ui(egui::vec2(48.0, 0.0), |ui| {
+                            ui.set_width(48.0);
+                            if header {
+                                ui.add(
+                                    egui::Image::new(avatar_for(&m.author))
+                                        .fit_to_exact_size(egui::vec2(40.0, 40.0))
+                                        .rounding(20.0),
+                                );
+                            }
+                        });
+                        // Colonne contenu.
+                        ui.vertical(|ui| {
+                            if header {
+                                ui.horizontal(|ui| {
+                                    let name = m
+                                        .author
+                                        .global_name
+                                        .clone()
+                                        .unwrap_or_else(|| m.author.username.clone());
+                                    ui.label(RichText::new(name).strong().color(Color32::WHITE));
+                                    if let Some(ts) = &m.timestamp {
+                                        let t = format_timestamp(ts);
+                                        if !t.is_empty() {
+                                            ui.label(RichText::new(t).small().color(Color32::GRAY));
+                                        }
+                                    }
+                                });
+                            }
+                            if !m.content.is_empty() {
+                                render_message(ui, &m.content, plugins);
+                            }
+                            for att in &m.attachments {
+                                if att.is_image() {
+                                    if let Some(url) = render_attachment_image(ui, att) {
+                                        clicked_image = Some(url);
+                                    }
+                                } else {
+                                    let label = format!("📎 {} ({} o)", att.filename, att.size);
+                                    if ui.link(label).clicked() {
+                                        ui.ctx().open_url(egui::OpenUrl::new_tab(&att.url));
+                                    }
+                                }
+                            }
+                        });
                     });
+                    ui.add_space(if header { 6.0 } else { 1.0 });
                 }
             });
     });
+    if let Some(url) = clicked_image {
+        state.viewer = Some(url);
+    }
 
     if *show_plugins {
         let mut open = true;
@@ -471,6 +544,29 @@ fn draw_chat(
             .show(ctx, |ui| plugins.settings_ui(ui));
         if !open {
             *show_plugins = false;
+        }
+    }
+
+    if let Some(url) = state.viewer.clone() {
+        let mut close = false;
+        egui::Area::new(egui::Id::new("image_viewer"))
+            .fixed_pos(egui::pos2(0.0, 0.0))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                let screen = ctx.screen_rect();
+                ui.painter()
+                    .rect_filled(screen, 0.0, Color32::from_black_alpha(220));
+                let resp = ui.allocate_rect(screen, egui::Sense::click());
+                ui.put(
+                    screen.shrink(40.0),
+                    egui::Image::new(&url).max_size(screen.size() * 0.9),
+                );
+                if resp.clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    close = true;
+                }
+            });
+        if close {
+            state.viewer = None;
         }
     }
 }

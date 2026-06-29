@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use veloce_discord::User;
 
 const CDN: &str = "https://cdn.discordapp.com";

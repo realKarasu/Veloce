@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 /// Convertit une date civile (UTC) en jours depuis 1970-01-01 (algorithme de
 /// Howard Hinnant, pur entier).
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {

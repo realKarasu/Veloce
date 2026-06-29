@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::timestamp::parse_epoch;
 use veloce_discord::Message;
 

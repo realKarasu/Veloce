@@ -18,7 +18,7 @@ tracing.workspace = true
 eframe = "0.30"
 egui = "0.30"
 egui_extras = { version = "0.30", features = ["all_loaders"] }
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
 unicode-segmentation = "1"
 unic-emoji-char = "0.9"
 keyring = "3"

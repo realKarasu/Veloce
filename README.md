@@ -19,9 +19,14 @@ Première version fonctionnelle de bout en bout :
   **trousseau du système** — jamais en clair sur disque).
 - **Gateway** temps réel (WebSocket) + **REST**, avec reconnexion automatique
   (backoff, RESUME/IDENTIFY) et respect des rate limits.
-- Liste des **serveurs** et **salons texte**, lecture de l'historique, réception
+- Liste des **serveurs** et des **salons** fidèle à Discord : arborescence par
+  **catégories**, icônes par type (#, 🔊, 📢…), et **masquage par permissions**
+  (les salons sans accès n'apparaissent pas). Lecture de l'historique, réception
   des messages en **temps réel**, **envoi** de messages.
 - Rendu **markdown** basique (gras, italique, barré, code).
+- **Polices larges** (latin étendu, cyrillique, grec, symboles, CJK) et
+  **emojis en couleur** partout — Unicode (twemoji) et custom Discord
+  `<:nom:id>` — dans les messages comme dans les noms de salons/serveurs.
 - Interface **3 panneaux** (serveurs · salons · messages) ; au repos, ~0 % CPU
   (aucun polling, repaint à la demande).
 
@@ -71,6 +76,9 @@ dans `PluginManager::builtin()`.
 - **Plugins :** seul l'**ensemble activé** persiste ; les réglages internes d'un
   plugin (ex. les règles de TextReplace) reviennent à leur défaut au
   redémarrage.
+- **Emojis :** rendus en images couleur téléchargées depuis un CDN (1 requête
+  par emoji unique, cache en session). Les emojis **animés** sont affichés en
+  **statique**.
 
 ## Hors périmètre v0.1 (à venir)
 

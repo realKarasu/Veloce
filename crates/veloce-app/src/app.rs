@@ -1,8 +1,9 @@
+use crate::emoji::{split_emojis, EmojiSeg};
 use crate::markdown::{parse_markdown, Span};
 use crate::net::{spawn_net, NetHandle};
 use crate::plugins::PluginManager;
 use eframe::egui;
-use egui::{text::LayoutJob, Color32, FontId, RichText, TextFormat};
+use egui::{Color32, RichText};
 use std::collections::HashSet;
 use veloce_discord::{
     build_channel_tree, visible_channel_ids, Channel, Command, ConnectionState, Event, Guild,
@@ -102,29 +103,49 @@ fn keyring_clear() {
     }
 }
 
-fn spans_to_job(spans: &[Span]) -> LayoutJob {
-    let mut job = LayoutJob::default();
-    for s in spans {
-        let mut fmt = TextFormat {
-            font_id: FontId::proportional(14.0),
-            ..Default::default()
-        };
-        if s.code {
-            fmt.font_id = FontId::monospace(13.0);
-            fmt.background = Color32::from_gray(40);
-        }
-        if s.bold {
-            fmt.color = Color32::WHITE;
-        }
-        if s.italic {
-            fmt.italics = true;
-        }
-        if s.strike {
-            fmt.strikethrough = egui::Stroke::new(1.0, Color32::GRAY);
-        }
-        job.append(&s.text, 0.0, fmt);
+const EMOJI_SIZE: f32 = 20.0;
+
+/// RichText stylé selon un span markdown.
+fn span_rich(text: &str, span: &Span) -> RichText {
+    let mut rt = RichText::new(text).size(14.0);
+    if span.code {
+        rt = rt.monospace().background_color(Color32::from_gray(40));
     }
-    job
+    if span.bold {
+        rt = rt.strong().color(Color32::WHITE);
+    }
+    if span.italic {
+        rt = rt.italics();
+    }
+    if span.strike {
+        rt = rt.strikethrough();
+    }
+    rt
+}
+
+/// Rend un message : markdown (via plugins) + emojis couleur inline.
+fn render_message(ui: &mut egui::Ui, content: &str, plugins: &mut PluginManager) {
+    let mut c = content.to_string();
+    plugins.apply_render(&mut c);
+    let spans = parse_markdown(&c);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        for span in &spans {
+            for seg in split_emojis(&span.text) {
+                match seg {
+                    EmojiSeg::Text(t) => {
+                        ui.label(span_rich(&t, span));
+                    }
+                    EmojiSeg::Emoji { url } => {
+                        ui.add(
+                            egui::Image::new(url)
+                                .fit_to_exact_size(egui::vec2(EMOJI_SIZE, EMOJI_SIZE)),
+                        );
+                    }
+                }
+            }
+        }
+    });
 }
 
 impl eframe::App for VeloceApp {
@@ -375,9 +396,7 @@ fn draw_chat(
                                 .strong()
                                 .color(Color32::LIGHT_BLUE),
                         );
-                        let mut content = m.content.clone();
-                        plugins.apply_render(&mut content);
-                        ui.label(spans_to_job(&parse_markdown(&content)));
+                        render_message(ui, &m.content, plugins);
                     });
                 }
             });

@@ -490,8 +490,15 @@ mod tests {
                 username: "user".into(),
                 global_name: None,
                 discriminator: None,
+                avatar: None,
             },
             timestamp: None,
+            edited_timestamp: None,
+            mentions: Vec::new(),
+            mention_roles: Vec::new(),
+            attachments: Vec::new(),
+            embeds: Vec::new(),
+            referenced_message: None,
         }
     }
 

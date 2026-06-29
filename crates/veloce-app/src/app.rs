@@ -141,9 +141,24 @@ fn rich_label_row(
         }
     });
 
-    let resp = inner.response.interact(egui::Sense::click());
+    // Toute la ligne (pleine largeur) est cliquable. On interagit explicitement
+    // via `ui.interact` avec un id propre : `.interact()` sur la réponse d'un
+    // layout `horizontal` ne détecte pas le clic de façon fiable.
+    let row_rect = egui::Rect::from_min_size(
+        inner.response.rect.min,
+        egui::vec2(
+            ui.available_width().max(inner.response.rect.width()),
+            inner.response.rect.height(),
+        ),
+    );
+    let sense = if enabled {
+        egui::Sense::click()
+    } else {
+        egui::Sense::hover()
+    };
+    let resp = ui.interact(row_rect, inner.response.id.with("row_click"), sense);
 
-    if selected || resp.hovered() {
+    if selected || (enabled && resp.hovered()) {
         let bg = if selected {
             ui.visuals().selection.bg_fill
         } else {

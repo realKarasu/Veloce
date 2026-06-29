@@ -5,6 +5,7 @@ mod fonts;
 mod markdown;
 mod net;
 mod plugins;
+mod timestamp;
 
 use app::VeloceApp;
 

@@ -4082,6 +4082,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui_extras",
+ "ehttp",
  "image",
  "keyring",
  "serde",

@@ -23,8 +23,17 @@ pub fn twemoji_code(grapheme: &str) -> String {
         .join("-")
 }
 
+/// `Some("bytes://emoji/{code}.png")` si l'emoji est embarqué, sinon None.
+pub fn embedded_emoji_uri(code: &str) -> Option<String> {
+    crate::embedded_emoji::EMBEDDED
+        .iter()
+        .any(|(c, _)| *c == code)
+        .then(|| format!("bytes://emoji/{code}.png"))
+}
+
 pub fn twemoji_url(grapheme: &str) -> String {
-    format!("{TWEMOJI_BASE}/{}.png", twemoji_code(grapheme))
+    let code = twemoji_code(grapheme);
+    embedded_emoji_uri(&code).unwrap_or_else(|| format!("{TWEMOJI_BASE}/{code}.png"))
 }
 
 /// Un graphème est un emoji Unicode s'il contient VS16 (U+FE0F) ou si son 1er
@@ -180,5 +189,16 @@ mod tests {
     #[test]
     fn texte_consecutif_fusionne() {
         assert_eq!(split_emojis("hello"), vec![EmojiSeg::Text("hello".into())]);
+    }
+
+    #[test]
+    fn embedded_emoji_uri_embedded_and_not() {
+        // 1f600 is in the embedded set
+        assert_eq!(
+            embedded_emoji_uri("1f600"),
+            Some("bytes://emoji/1f600.png".to_string())
+        );
+        // "0" is definitely not in the embedded set
+        assert_eq!(embedded_emoji_uri("0"), None);
     }
 }

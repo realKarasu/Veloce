@@ -105,6 +105,62 @@ fn keyring_clear() {
 
 const EMOJI_SIZE: f32 = 20.0;
 
+/// Ligne cliquable pleine largeur de la sidebar : icône (glyphe) optionnelle +
+/// nom avec emojis couleur (images). Le rectangle est réservé d'abord AVEC le
+/// sense de clic (clic fiable sur toute la ligne, fond borné au panneau), puis
+/// le contenu est rendu dans ce rect via un `new_child`.
+fn rich_label_row(
+    ui: &mut egui::Ui,
+    icon: Option<&str>,
+    name: &str,
+    selected: bool,
+    enabled: bool,
+) -> egui::Response {
+    const ROW_H: f32 = 24.0;
+    let width = ui.available_width();
+    let sense = if enabled {
+        egui::Sense::click()
+    } else {
+        egui::Sense::hover()
+    };
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, ROW_H), sense);
+
+    if selected || (enabled && resp.hovered()) {
+        let bg = if selected {
+            ui.visuals().selection.bg_fill
+        } else {
+            ui.visuals().widgets.hovered.bg_fill
+        };
+        ui.painter().rect_filled(rect, 4.0, bg.gamma_multiply(0.5));
+    }
+
+    let color = if enabled {
+        ui.visuals().text_color()
+    } else {
+        ui.visuals().weak_text_color()
+    };
+    let mut content = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect.shrink2(egui::vec2(6.0, 0.0)))
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+    );
+    content.spacing_mut().item_spacing.x = 3.0;
+    if let Some(ic) = icon {
+        content.label(RichText::new(ic).color(color));
+    }
+    for seg in split_emojis(name) {
+        match seg {
+            EmojiSeg::Text(t) => {
+                content.label(RichText::new(t).size(14.0).color(color));
+            }
+            EmojiSeg::Emoji { url } => {
+                content.add(egui::Image::new(url).fit_to_exact_size(egui::vec2(18.0, 18.0)));
+            }
+        }
+    }
+    resp
+}
+
 /// RichText stylé selon un span markdown.
 fn span_rich(text: &str, span: &Span) -> RichText {
     let mut rt = RichText::new(text).size(14.0);
@@ -302,10 +358,8 @@ fn draw_chat(
             ui.separator();
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for g in state.guilds.clone() {
-                    if ui
-                        .selectable_label(state.selected_guild.as_ref() == Some(&g.id), &g.name)
-                        .clicked()
-                    {
+                    let selected = state.selected_guild.as_ref() == Some(&g.id);
+                    if rich_label_row(ui, None, &g.name, selected, true).clicked() {
                         state.selected_guild = Some(g.id.clone());
                         state.channels.clear();
                         state.channel_tree.clear();
@@ -333,10 +387,12 @@ fn draw_chat(
                             let selectable = matches!(c.kind, 0 | 5 | 15);
                             let selected = state.selected_channel.as_ref() == Some(&c.id);
                             let name = c.name.clone().unwrap_or_else(|| c.id.clone());
-                            let label = format!("{} {name}", channel_icon(c.kind));
-                            let resp = ui.add_enabled(
+                            let resp = rich_label_row(
+                                ui,
+                                Some(channel_icon(c.kind)),
+                                &name,
+                                selected,
                                 selectable,
-                                egui::SelectableLabel::new(selected, label),
                             );
                             if resp.clicked() {
                                 state.selected_channel = Some(c.id.clone());
